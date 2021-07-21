@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>three.js Sample</title>
+    <meta charset="utf-8">
+    <link rel="stylesheet" href="css/style.css">
+    <script src="../three.js-master/build/three.min.js"></script><!--three.jsライブラリの読み込み-->
+    <script src="../three.js-master/examples/js/controls/PointerLockControls.js"></script><!--PointerLockControls.jsの読み込み-->
+    <script type="text/javascript" src="main.js"></script>
+    
+  </head>
+  <!-- スクロールバーが出る方はoverflowをhiddenに設定すると消えます
+  <body style="overflow: hidden;"> -->
+  <body>
+    <textarea id="textarea3" value="1" cols="50" rows="50" class = "textareaZone"></textarea>
+    <script id="vertex_shader" type="x-shader/x-vertex">
+      varying vec3 vPosition;
+      varying vec3 cp;
+      uniform float time;
+
+      void main(){
+        vPosition = (vec4(position,1.) * modelMatrix ).xyz;
+        mat4 viewmodel = inverse(modelViewMatrix);
+        cp = (viewmodel[3]*modelMatrix).xyz;
+        gl_Position += projectionMatrix * modelViewMatrix * vec4(vPosition, 1.0);
+      }
+    </script>
+    <script id="fragment_shader" type="x-shader/x-fragment">
+      precision highp float;
+      
+      varying vec3 vPosition;
+      varying vec3 cp;
+      uniform float time;
+
+
+      void main(){
+        vec4 color = vec4(1.);
+        color.rgb = normalize(cp - vPosition);
+        gl_FragColor = color;
+      }
+
+    </script>
+    <script>
+      document.addEventListener('DOMContentLoaded', function(){
+        main();
+      });
+    </script>
+  </body>
+</html>

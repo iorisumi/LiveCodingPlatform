@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>VR Live Coding Editor </title>
+    <meta charset="utf-8">
+    <link rel="stylesheet" href="css/style.css">
+    <script src="../three.js-master/build/three.min.js"></script><!--three.jsライブラリの読み込み-->
+    <!-- <script src="../three.js-master/examples/jsm/webxr/VRButton.js"></script> -->
+    <script src="../three.js-master/examples/js/controls/PointerLockControls.js"></script><!--PointerLockControls.jsの読み込み-->
+    <!-- <script src="https://unpkg.com/@seregpie/three.text-texture"></script>
+    <script src="https://unpkg.com/@seregpie/three.text-sprite"></script> -->
+
+    <!-- <script type="text/javascript" src="main.js"></script> -->
+    
+  </head>
+  <!-- スクロールバーが出る方はoverflowをhiddenに設定すると消えます -->
+  <body style="overflow: hidden;">
+ <!-- // <body> -->
+    <textarea id="textarea3" value="1" cols="50" rows="50" class = "textareaZone"></textarea>
+    <script id="vertex_shader" type="x-shader/x-vertex">
+      varying vec3 vPosition;
+      varying vec3 cp;
+      uniform float time;
+
+      void main(){
+        vPosition = (vec4(position,1.) * modelMatrix ).xyz;
+        mat4 viewmodel = inverse(modelViewMatrix);
+        cp = (viewmodel[3]*modelMatrix).xyz;
+       // cp = (viewmodel[3]).xyz * modelMatrix;
+        gl_Position += projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    </script>
+    <script id="fragment_shader" type="x-shader/x-fragment">
+precision highp float;
+
+varying vec3 vPosition;
+varying vec3 cp;
+uniform float time;
+
+
+void main(){
+    vec4 color = vec4(1.);
+    color.rgb = normalize(cp - vPosition);
+    gl_FragColor = color;
+}
+
+    </script>
+    <script type="module">
+      import { VRButton } from '../three.js-master/examples/jsm/webxr/VRButton.js';
+    var scene = new THREE.Scene();  //シーンを作成
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 5000);  //カメラを作成
+    const renderer = new THREE.WebGLRenderer(); //レンダラーを作成
+
+    const controls = new THREE.PointerLockControls(camera, renderer.domElement);  //カメラにPointerLockControls機能を付与
+    const boxGeometry = new THREE.BoxGeometry(200, 600, 200); //boxの形状データ
+    var boxMaterial;
+    var box1;
+
+    const skyBoxGeometry = new THREE.BoxGeometry(5000, 5000, 5000); //boxの形状データ
+    var skyBox;
+    var skyBoxMaterial;
+
+    let moveForward = false;
+    let moveBackward = false;
+    let moveLeft = false;
+    let moveRight = false;
+    let prevTime = performance.now(); //1フレーム前の時刻を記憶
+    let velocity = new THREE.Vector3();
+    let direction = new THREE.Vector3();
+
+    var textarea = document.getElementById("textarea3");
+    var textContents = textarea.value;
+    const canvasW = 256 * 8;
+    const canvasH = 256 * 8 * 2;
+    
+    const fontSize = 28;
+    var maxRow = Math.ceil(canvasW / fontSize) - 1.;
+
+    var cursorPosition = textarea.selectionStart;
+
+    // const ctx = document.createElement('canvas').getContext('2d');
+    // //ここでbodyに追加しなければ表示されない
+    // //document.body.appendChild(ctx.canvas);
+    // var fontSize = 28;
+    // ctx.font = "30px 'メイリオ'";
+    // ctx.canvas.width = 256 * 8;
+    // ctx.canvas.height = 256 * 8;
+    // ctx.fillStyle = '#5AFF19';
+    // ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+
+    const box = (() => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+
+        canvas.width = canvasW;
+        canvas.height = canvasH;
+
+        const geometry = boxGeometry;
+        const texture = new THREE.CanvasTexture(canvas);
+        const material = new THREE.MeshBasicMaterial({
+            map: texture,
+            opacity :1.5,
+            transparent : true,
+            depthTest : false
+    });
+
+    function update(t) {
+        ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+        ctx.font = "30px 'メイリオ'";
+        ctx.fillStyle = '#5AFF19';
+        //入力文字を1文字毎に配列化
+        var aryText = textContents.split('');
+
+        //出力用の配列を用意
+        var aryRow = [];
+        aryRow[0] = '';
+        var row_cnt = 0;
+
+        var cursorRow = 0.;
+        var cursorCol = 0.;
+        var count = 0.;
+
+        for (var i = 0; i < aryText.length; i++) {
+            var text = aryText[i];
+            aryRow[row_cnt] += text;
+            count++;
+            if (text == "\n" || maxRow < count) {
+                row_cnt++;
+                aryRow[row_cnt] = '';
+                text = '';
+                aryRow[row_cnt] += text;
+                count = 0.;
+            }
+            if(cursorPosition-1 == i)
+            {
+                cursorRow = row_cnt;
+                cursorCol = count;
+            }
+        }
+        //文字の表示　y軸とx軸をループする
+        for (var i = 0; i < aryRow.length; i++) {
+            var aryStr = aryRow[i].split('');
+            for (var j = 0; j < aryStr.length; j++) {
+                ctx.font = "33px 'メイリオ'";
+                ctx.fillStyle = '#ffffff';
+                ctx.fillText(aryStr[j], (j * fontSize) + fontSize/2, (i * fontSize));
+                ctx.font = "30px 'メイリオ'";
+                ctx.fillStyle = '#5AFF19';
+                ctx.fillText(aryStr[j], (j * fontSize) + fontSize/2, (i * fontSize));
+            }
+        }
+        
+        var text = (t > 0.)?'|':' ';
+        ctx.fillText(text , (cursorCol * fontSize) , (cursorRow * fontSize) );
+        material.map.needsUpdate = true;
+    }
+
+    const box = new THREE.Mesh(geometry,material);
+    box.update = update;
+    return box;
+    })();
+
+    
+    var move_Mode = 0;
+    var mouse_wheel = 0;
+    //コンパイルチェック用
+    var gl;
+    const offsetY = 100.;
+    const limitY = 400.;
+
+    //var stats;
+
+
+    function init() {    //初期化用関数
+        //VR化
+        document.body.appendChild( VRButton.createButton( renderer ) );
+        renderer.xr.enabled = true;
+        renderer.alpha = true;
+        
+		// renderer.getContext().makeXRCompatible();
+        // xrSession = navigator.xr.requestSession( 'inline' );
+           // this._xrSession.baseLayer = new XRWebGLLayer(this._xrSession, this._renderer.context);
+
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.BasicShadowMap;
+        document.body.appendChild(renderer.domElement); //canvas要素をbodyタグに追加
+
+        //webglからも触れるように
+        gl = renderer.getContext();
+
+        textarea.value =  document.getElementById('fragment_shader').textContent;
+
+        skyBoxMaterial = new THREE.ShaderMaterial({
+            uniforms: {
+                time: { type: "f", value: 0.0 },
+                // /cp :{type: "v3" ,value: new THREE.Vector3(0.,0.,0.)}
+                //resolution: { type: "v2", value: new THREE.Vector2(512.0, 512.0) }
+            },
+            vertexShader: document.getElementById('vertex_shader').textContent,
+            fragmentShader: textarea.value,
+            side: THREE.DoubleSide,
+        });
+
+        skyBox = new THREE.Mesh(skyBoxGeometry, skyBoxMaterial);
+
+        camera.position.set(0, 0, 0);
+        box.position.set(0, 0, -300);
+        scene.add(box);
+        scene.add(skyBox);
+        
+       // scene.add(Sprite);
+        scene.add(controls.getObject());
+
+        textarea.focus();
+        textContents = textarea.value
+        //textUpdate();
+        renderer.domElement.addEventListener('click', function () {
+            controls.lock();
+        });
+    }
+
+    function setMaterial(time) {
+        skyBoxMaterial.uniforms.time.value = time * 0.001;
+    }
+
+    function shaderUpdate()
+    {
+        var shader = gl.createShader(gl.FRAGMENT_SHADER);
+        gl.shaderSource(shader,document.getElementById('fragment_shader').textContent);
+        if(gl.getShaderParameter(shader, gl.COMPILE_STATUS))
+        {
+            console.log("true");
+        }else{
+            console.log("false");
+            console.log(gl.getShaderInfoLog(shader));
+        }
+
+        //コンパイル通った時の処理
+        scene.remove(skyBox);
+        skyBoxMaterial.dispose();
+
+        skyBoxMaterial = new THREE.ShaderMaterial({
+            uniforms: {
+                time: { type: "f", value: 0.0 },
+                //cp :{type: "v3" ,value: new THREE.Vector3(0.,0.,0.)}
+                //resolution: { type: "v2", value: new THREE.Vector2(512.0, 512.0) }
+            },
+            vertexShader: document.getElementById('vertex_shader').textContent,
+            fragmentShader: textarea.value,
+            side: THREE.DoubleSide,
+        });
+        skyBox = new THREE.Mesh(skyBoxGeometry, skyBoxMaterial);
+        scene.add(skyBox);
+        
+    }
+
+    function animate(timestamp) {
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        cursorPosition = textarea.selectionStart;
+        if(move_Mode){
+            move();
+        }
+        var t = Math.sin( ( (timestamp / 100.) * Math.acos(-1)));
+        textContents = textarea.value
+        box.update(t);
+        box.position.y = mouse_wheel;
+      //  box.scale.y = 2.1;
+
+        setMaterial(timestamp);
+        renderer.render(scene, camera);
+       // requestAnimationFrame(animate); //毎フレーム呼び出すことで描画
+        //VR
+        renderer.setAnimationLoop(animate);
+    }
+
+    function move() {  //カメラの移動を制御する関数.毎フレーム呼ばれる
+        let time = performance.now();
+        if (controls.isLocked === true) { //マウスのポインタがロックされているときのみ有効
+            let delta = (time - prevTime) / 1000;
+
+            //速度を減衰させる
+            velocity.x -= velocity.x * 10.0 * delta;
+            velocity.z -= velocity.z * 10.0 * delta;
+
+            //進行方向のベクトルを設定
+            direction.z = Number(moveForward) - Number(moveBackward);
+            direction.x = Number(moveRight) - Number(moveLeft);
+            direction.normalize();
+
+            if (moveForward || moveBackward) velocity.z -= direction.z * 1000.0 * delta;
+            if (moveLeft || moveRight) velocity.x -= direction.x * 1000.0 * delta;
+
+            controls.moveRight(- velocity.x * delta);
+            controls.moveForward(- velocity.z * delta);
+
+        }
+        prevTime = time;
+    }
+
+    
+
+    function OnTabKey( e, obj ){
+
+        // タブキーが押された時以外は即リターン
+        if( e.keyCode!=9 ){ return; }
+
+        // タブキーを押したときのデフォルトの挙動を止める
+        e.preventDefault();
+
+        // 現在のカーソルの位置と、カーソルの左右の文字列を取得しておく
+        var cursorPosition = obj.selectionStart;
+        var cursorLeft     = obj.value.substr( 0, cursorPosition );
+        var cursorRight    = obj.value.substr( cursorPosition, obj.value.length );
+
+        // テキストエリアの中身を、
+        // 「取得しておいたカーソルの左側」+「タブ」+「取得しておいたカーソルの右側」
+        // という状態にする。
+        obj.value = cursorLeft+"\t\t\t\t"+cursorRight;
+
+        // カーソルの位置を入力したタブの後ろにする
+        obj.selectionEnd = cursorPosition+4;
+    }
+    
+    let onKeyDown = function (event) {  //キーボード押下時の処理
+        //console.log(event.keyCode);
+        if(event.keyCode == 18){
+           // move_Mode = 1 - move_Mode;
+            console.log(move_Mode)
+        }
+        if(0 == move_Mode)
+        {
+            OnTabKey(event,textarea);
+            textarea.focus();
+        }else{
+            textarea.blur();
+            switch ( event.keyCode ) {
+                case 87: // w
+                  moveForward = true;
+                  break;
+                case 65: // a
+                  moveLeft = true;
+                  break;
+                case 83: // s
+                  moveBackward = true;
+                  break;
+                case 68: // d
+                  moveRight = true;
+                  break;
+              }
+        }
+    };
+
+
+    let onKeyUp = function ( event ) {  //キーボードから離れたとき
+        if(1==move_Mode){
+            switch ( event.keyCode ) {
+                case 87: // w
+                    moveForward = false;
+                    break;
+                case 65: // a
+                    moveLeft = false;
+                    break;
+                case 83: // s
+                    moveBackward = false;
+                    break;
+                case 68: // d
+                    moveRight = false;
+                    break;
+                }
+        }else{
+            textContents = textarea.value;
+            console.log(textContents);
+            shaderUpdate();
+            setMaterial();
+        }
+    };
+
+    window.onmousewheel = function(event){
+        mouse_wheel += (event.wheelDelta);
+        mouse_wheel -= Math.sign(mouse_wheel) * Math.abs( Math.abs(mouse_wheel-offsetY) - limitY) * (Math.abs(mouse_wheel-offsetY) > limitY );
+       // mouse_wheel = Math.min(limitY,Math.max(-limitY,mouse_wheel - offsetY));
+       // console.log(mouse_wheel);
+    }
+
+    init();
+    animate();
+
+
+    document.body.addEventListener('keydown', onKeyDown, false);  //キーボードに関するイベントリスナ登録
+    document.body.addEventListener('keyup', onKeyUp, false);
+    </script>
+  </body>
+</html>
